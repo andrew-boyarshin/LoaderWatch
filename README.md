@@ -10,6 +10,9 @@ Toolbox to assist debugging, tracing and memory inspection of Windows PE image l
 * Optional Windows Registry operations logging
 * Hooking of non-exported LDR methods thanks to IPC and DbgHelp
 
+## Demo
+[![YouTube Demo video](https://img.youtube.com/vi/qxPEV4PJ6XY/0.jpg)](https://www.youtube.com/watch?v=qxPEV4PJ6XY)
+
 ## Get Started
 * Ensure latest .NET Core 5.0+ daily build is installed
 * Ensure latest Visual Studio 16.2+ is installed
