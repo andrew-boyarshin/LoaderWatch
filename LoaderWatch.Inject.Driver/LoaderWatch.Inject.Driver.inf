@@ -1,0 +1,68 @@
+;
+; LoaderWatch.Inject.Driver.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=Sample ; TODO: edit Class
+ClassGuid={78A1C341-4539-11d3-B88D-00C04FAD5175}
+Provider=%ManufacturerName%
+CatalogFile=LoaderWatch.Inject.Driver.cat
+DriverVer= ; TODO: set DriverVer in stampinf property pages
+
+[DestinationDirs]
+DefaultDestDir = 12
+LoaderWatch_Device_CoInstaller_CopyFiles = 11
+
+; ================= Class section =====================
+
+[ClassInstall32]
+Addreg=SampleClassReg
+
+[SampleClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+LoaderWatch.Inject.Driver.sys = 1,,
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll=1
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Standard,NT$ARCH$
+
+[Standard.NT$ARCH$]
+%LoaderWatch.DeviceDesc%=LoaderWatch_Device,Root\LoaderWatch ; TODO: edit hw-id
+
+[LoaderWatch_Device.NT]
+CopyFiles=Drivers_Dir
+
+[Drivers_Dir]
+LoaderWatch.Inject.Driver.sys
+
+;-------------- Service installation
+[LoaderWatch_Device.NT.Services]
+AddService = LoaderWatch,0x00000002,LoaderWatch_Service_Inst
+
+; -------------- injdrv driver install sections
+[LoaderWatch_Service_Inst]
+DisplayName = %LoaderWatch.SVCDESC%
+ServiceType = 1 ; SERVICE_KERNEL_DRIVER
+StartType = 3 ; SERVICE_DEMAND_START
+ErrorControl = 1 ; SERVICE_ERROR_NORMAL
+ServiceBinary = %12%\LoaderWatch.Inject.Driver.sys
+
+;--- LoaderWatch_Device Coinstaller installation ------
+
+[Strings]
+ManufacturerName = "Andrew Boyarshin"
+ClassName = "LoaderWatch Virtual Devices"
+DiskName = "LoaderWatch Installation Disk"
+LoaderWatch.DeviceDesc = "LoaderWatch Injection Device"
+LoaderWatch.SVCDESC = "LoaderWatch Injection Service"
