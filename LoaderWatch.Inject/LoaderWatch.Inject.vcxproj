@@ -43,10 +43,10 @@
     <ClCompile Include="disolx64.cpp" />
     <ClCompile Include="disolx86.cpp" />
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="format.cc" />
+    <ClCompile Include="fmt\format.cc" />
+    <ClCompile Include="fmt\posix.cc" />
     <ClCompile Include="image.cpp" />
     <ClCompile Include="modules.cpp" />
-    <ClCompile Include="posix.cc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

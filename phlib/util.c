@@ -33,7 +33,6 @@
 #include <apiimport.h>
 #include <lsasup.h>
 #include <mapimg.h>
-#include <settings.h>
 
 #include <wslsup.h>
 

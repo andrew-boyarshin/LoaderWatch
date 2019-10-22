@@ -44,9 +44,6 @@
     <ClCompile Include="graph.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="guisup.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="handle.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -81,9 +78,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ref.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="secdata.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sha.c">

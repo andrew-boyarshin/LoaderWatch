@@ -48,12 +48,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="format.cc">
-      <Filter>fmt</Filter>
-    </ClCompile>
-    <ClCompile Include="posix.cc">
-      <Filter>fmt</Filter>
-    </ClCompile>
     <ClCompile Include="creatwth.cpp">
       <Filter>detours</Filter>
     </ClCompile>
@@ -75,6 +69,8 @@
     <ClCompile Include="modules.cpp">
       <Filter>detours</Filter>
     </ClCompile>
+    <ClCompile Include="fmt\format.cc" />
+    <ClCompile Include="fmt\posix.cc" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="fmt">

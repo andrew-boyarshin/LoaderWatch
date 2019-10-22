@@ -148,7 +148,6 @@
     <ClCompile Include="format.c" />
     <ClCompile Include="global.c" />
     <ClCompile Include="graph.c" />
-    <ClCompile Include="guisup.c" />
     <ClCompile Include="handle.c" />
     <ClCompile Include="hexedit.c" />
     <ClCompile Include="hndlinfo.c" />
@@ -165,7 +164,6 @@
     <ClCompile Include="provider.c" />
     <ClCompile Include="queuedlock.c" />
     <ClCompile Include="ref.c" />
-    <ClCompile Include="secdata.c" />
     <ClCompile Include="sha.c" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="util.c" />

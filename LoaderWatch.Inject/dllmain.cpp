@@ -191,12 +191,37 @@ void __CRTDECL operator delete(void* ptr) noexcept
 }
 
 inline fmt::wstring_view str(const UNICODE_STRING* p) {
+    if (!p)
+        return L"<nullptr>";
     if (!p->Buffer)
         return L"<NULL>";
     if (!p->Length)
-        return L"";
+        return L"<empty>";
 
     return fmt::wstring_view(p->Buffer, p->Length / sizeof(WCHAR));
+}
+
+inline std::wstring str(const LDRP_UNICODE_STRING_BUNDLE* p) {
+    const auto view = str(&p->String);
+    const std::wstring result{ view.data(), view.size() };
+
+    if (!p || !p->String.Buffer)
+        return result;
+
+    if (p->String.Buffer == p->StaticBuffer)
+        return L"[S] " + result;
+
+    return L"[D] " + result;
+}
+
+inline fmt::wstring_view str(const LDR_DATA_TABLE_ENTRY* p) {
+    if (!p)
+        return L"<nullptr>";
+    return str(&p->BaseDllName);
+}
+
+inline std::wstring str(BOOLEAN p) {
+    return p ? L"T" : L"F";
 }
 
 template <class T>
@@ -266,6 +291,8 @@ decltype(LdrpMapDllWithSectionHandle)* OrigLdrpMapDllWithSectionHandle = nullptr
 decltype(LdrpFreeLoadContext)* OrigLdrpFreeLoadContext = nullptr;
 decltype(LdrpUnmapModule)* OrigLdrpUnmapModule = nullptr;
 decltype(HookLdrpCondenseGraphRecurse)* OrigLdrpCondenseGraphRecurse = nullptr;
+decltype(LdrpPreprocessDllName)* OrigLdrpPreprocessDllName = nullptr;
+decltype(LdrpApplyFileNameRedirection)* OrigLdrpApplyFileNameRedirection = nullptr;
 
 EXTERN_C decltype(LdrpAllocateModuleEntry) HookLdrpAllocateModuleEntry;
 EXTERN_C decltype(LdrpMergeNodes) HookLdrpMergeNodes;
@@ -273,6 +300,8 @@ EXTERN_C decltype(LdrpDestroyNode) HookLdrpDestroyNode;
 EXTERN_C decltype(LdrpMapDllWithSectionHandle) HookLdrpMapDllWithSectionHandle;
 EXTERN_C decltype(LdrpUnmapModule) HookLdrpUnmapModule;
 //EXTERN_C decltype(LdrpCondenseGraphRecurse) HookLdrpCondenseGraphRecurse;
+EXTERN_C decltype(LdrpPreprocessDllName) HookLdrpPreprocessDllName;
+EXTERN_C decltype(LdrpApplyFileNameRedirection) HookLdrpApplyFileNameRedirection;
 
 EXTERN_C
 PLDR_DATA_TABLE_ENTRY
@@ -298,7 +327,7 @@ HookLdrpMergeNodes(PLDR_DDAG_NODE Root, PSINGLE_LIST_ENTRY* CondenseLink)
     PLDR_DATA_TABLE_ENTRY RootEntry = CONTAINING_RECORD(Root->Modules.Flink, LDR_DATA_TABLE_ENTRY, NodeModuleLink);
     dbgprint(
         fmt(L"[inj]: HookLdrpMergeNodes({}, ...)"),
-        str(&RootEntry->BaseDllName)
+        str(RootEntry)
     );
 
     PSINGLE_LIST_ENTRY CondenseCurrentLink = *CondenseLink;
@@ -311,7 +340,7 @@ HookLdrpMergeNodes(PLDR_DDAG_NODE Root, PSINGLE_LIST_ENTRY* CondenseLink)
         dbgprint(
             fmt(L"[inj]: #{}: {}"),
             Count,
-            str(&CurrentEntry->BaseDllName)
+            str(CurrentEntry)
         );
 
         Count++;
@@ -399,9 +428,72 @@ HookLdrpCondenseGraphRecurse(LDR_DDAG_NODE* Node, ULONG32* PreorderNumberStorage
     );
 }
 
+EXTERN_C
+NTSTATUS
+FASTCALL
+HookLdrpPreprocessDllName(IN PUNICODE_STRING DllName,
+    IN OUT PLDRP_UNICODE_STRING_BUNDLE OutputDllName,
+    IN PLDR_DATA_TABLE_ENTRY ParentEntry OPTIONAL,
+    OUT PLDRP_LOAD_CONTEXT_FLAGS LoadContextFlags)
+{
+    dbgprint(
+        fmt(L"[inj]: HookLdrpPreprocessDllName({}, {}, {}, {:#b}) ENTER"),
+        str(DllName),
+        str(OutputDllName),
+        str(ParentEntry),
+        LoadContextFlags->Flags
+    );
+
+    auto res = OrigLdrpPreprocessDllName(DllName, OutputDllName, ParentEntry, LoadContextFlags);
+
+    dbgprint(
+        fmt(L"[inj]: HookLdrpPreprocessDllName({}, {}, {}, {:#b}) EXIT [{:X}]"),
+        str(DllName),
+        str(OutputDllName),
+        str(ParentEntry),
+        LoadContextFlags->Flags,
+        res
+    );
+
+    return res;
+}
+
+EXTERN_C
+NTSTATUS
+FASTCALL
+HookLdrpApplyFileNameRedirection(IN PLDR_DATA_TABLE_ENTRY ParentEntry,
+    IN PUNICODE_STRING DllName,
+    IN PVOID Unused,
+    IN OUT PLDRP_UNICODE_STRING_BUNDLE RedirectedDllName,
+    OUT PBOOLEAN RedirectedSxS)
+{
+    dbgprint(
+        fmt(L"[inj]: HookLdrpApplyFileNameRedirection({}, {}, {}, {}, {}) ENTER"),
+        str(ParentEntry),
+        str(DllName),
+        Unused,
+        str(RedirectedDllName),
+        (PVOID)RedirectedSxS
+    );
+
+    auto res = OrigLdrpApplyFileNameRedirection(ParentEntry, DllName, Unused, RedirectedDllName, RedirectedSxS);
+
+    dbgprint(
+        fmt(L"[inj]: HookLdrpApplyFileNameRedirection({}, {}, {}, {}, {}) EXIT [{:X}]"),
+        str(ParentEntry),
+        str(DllName),
+        Unused,
+        str(RedirectedDllName),
+        str(*RedirectedSxS),
+        res
+    );
+
+    return res;
+}
+
 NTSTATUS
 NTAPI
-EnableDetours(VOID)
+EnableDetours()
 {
     assert(DetourTransactionBegin() == NO_ERROR);
     assert(DetourUpdateThread(GetCurrentThread()) == NO_ERROR);
@@ -443,6 +535,16 @@ EnableDetours(VOID)
         OrigLdrpCondenseGraphRecurse = static_cast<decltype(OrigLdrpCondenseGraphRecurse)>(Target);
         assert(DetourAttach((PVOID*)&OrigLdrpCondenseGraphRecurse, HookLdrpCondenseGraphRecurse) == NO_ERROR);
     }
+    {
+        Target = PTR_ADD_OFFSET(NtdllHandle, TargetOffsets[HookTargetLdrpPreprocessDllName]);
+        OrigLdrpPreprocessDllName = static_cast<decltype(OrigLdrpPreprocessDllName)>(Target);
+        assert(DetourAttach((PVOID*)&OrigLdrpPreprocessDllName, HookLdrpPreprocessDllName) == NO_ERROR);
+    }
+    {
+        Target = PTR_ADD_OFFSET(NtdllHandle, TargetOffsets[HookTargetLdrpApplyFileNameRedirection]);
+        OrigLdrpApplyFileNameRedirection = static_cast<decltype(OrigLdrpApplyFileNameRedirection)>(Target);
+        assert(DetourAttach((PVOID*)&OrigLdrpApplyFileNameRedirection, HookLdrpApplyFileNameRedirection) == NO_ERROR);
+    }
 
     assert(DetourTransactionCommit() == NO_ERROR);
 
@@ -451,7 +553,7 @@ EnableDetours(VOID)
 
 NTSTATUS
 NTAPI
-DisableDetours(VOID)
+DisableDetours()
 {
     assert(DetourTransactionBegin() == NO_ERROR);
     assert(DetourUpdateThread(GetCurrentThread()) == NO_ERROR);
@@ -463,6 +565,8 @@ DisableDetours(VOID)
     assert(DetourDetach((PVOID*)&OrigLdrpFreeLoadContext, HookLdrpFreeLoadContext) == NO_ERROR);
     assert(DetourDetach((PVOID*)&OrigLdrpUnmapModule, HookLdrpUnmapModule) == NO_ERROR);
     assert(DetourDetach((PVOID*)&OrigLdrpCondenseGraphRecurse, HookLdrpCondenseGraphRecurse) == NO_ERROR);
+    assert(DetourDetach((PVOID*)&OrigLdrpPreprocessDllName, HookLdrpPreprocessDllName) == NO_ERROR);
+    assert(DetourDetach((PVOID*)&OrigLdrpApplyFileNameRedirection, HookLdrpApplyFileNameRedirection) == NO_ERROR);
 
     assert(DetourTransactionCommit() == NO_ERROR);
 
@@ -471,8 +575,7 @@ DisableDetours(VOID)
 
 NTSTATUS
 NTAPI
-OnProcessAttach(
-    _In_ PVOID ModuleHandle)
+OnProcessAttach(_In_ PVOID ModuleHandle)
 {
     UNICODE_STRING NtdllPath;
     RtlInitUnicodeString(&NtdllPath, (PWSTR)L"ntdll.dll");
@@ -484,33 +587,6 @@ OnProcessAttach(
     LdrAddRefDll(LDR_ADDREF_DLL_PIN, ModuleHandle);
 
     PPEB Peb = NtCurrentPeb();
-
-#if 0
-    // Hide this DLL from the PEB.
-
-    PLIST_ENTRY ListEntry;
-
-    for (ListEntry = Peb->Ldr->InLoadOrderModuleList.Flink;
-        ListEntry != &Peb->Ldr->InLoadOrderModuleList;
-        ListEntry = ListEntry->Flink)
-    {
-        PLDR_DATA_TABLE_ENTRY LdrEntry = CONTAINING_RECORD(ListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-        //
-        // ModuleHandle is same as DLL base address.
-        //
-
-        if (LdrEntry->DllBase == ModuleHandle)
-        {
-            RemoveEntryList(&LdrEntry->InLoadOrderLinks);
-            RemoveEntryList(&LdrEntry->InInitializationOrderLinks);
-            RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
-            RemoveEntryList(&LdrEntry->HashLinks);
-
-            break;
-}
-    }
-#endif
 
     dbgprint(
         fmt(L"[inj]: Arch: {}, NTDLL: {}, me: {}, CommandLine: {}"),
@@ -532,8 +608,7 @@ OnProcessAttach(
 
 NTSTATUS
 NTAPI
-OnProcessDetach(
-    _In_ HANDLE ModuleHandle)
+OnProcessDetach()
 {
     // Unhook all functions.
 
@@ -555,7 +630,7 @@ NtDllMain(
         break;
 
     case DLL_PROCESS_DETACH:
-        OnProcessDetach(ModuleHandle);
+        OnProcessDetach();
         break;
 
     case DLL_THREAD_ATTACH:

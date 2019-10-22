@@ -9,5 +9,7 @@ typedef enum _LDR_HOOK_TARGETS
     HookTargetLdrpFreeLoadContext,
     HookTargetLdrpUnmapModule,
     HookTargetLdrpCondenseGraphRecurse,
+    HookTargetLdrpPreprocessDllName,
+    HookTargetLdrpApplyFileNameRedirection,
     HookTargetsCount
 } LDR_HOOK_TARGETS;

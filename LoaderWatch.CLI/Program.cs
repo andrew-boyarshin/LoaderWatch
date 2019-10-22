@@ -19,7 +19,6 @@ namespace LoaderWatch.CLI
 		private const RegexOptions RegexCommonOptions = RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.CultureInvariant;
 		private const string DefaultExecutable = @"C:\Windows\System32\notepad.exe";
 		private static readonly Facility DebugFacility = new Facility();
-		private static MemorySharp MyMemory;
 		private static Thread _thread;
 		private static string[] _rootDirectories = null;
 		private static string[] _platformDirectories = null;
@@ -27,7 +26,7 @@ namespace LoaderWatch.CLI
 
 		private delegate void ProcessOutputLineMatchDelegate(ProcessContext context, Match match);
 
-		private static IList<(Regex, ProcessOutputLineMatchDelegate)> InjectOutputLineMatchers = new List<(Regex, ProcessOutputLineMatchDelegate)>
+		private static readonly IList<(Regex, ProcessOutputLineMatchDelegate)> InjectOutputLineMatchers = new List<(Regex, ProcessOutputLineMatchDelegate)>
 		{
 			(new Regex(@"\[inj\]\|=(.+)", RegexCommonOptions), ProcessTargetOffsetsLine),
 			(new Regex(@"\[inj\]: HookLdrpAllocateModuleEntry\((.+)\) -> (\S+)", RegexCommonOptions), ProcessAllocateModuleEntryLine),
@@ -38,10 +37,13 @@ namespace LoaderWatch.CLI
 			(new Regex(@"\[inj\]: HookLdrpUnmapModule\((\S+)\)", RegexCommonOptions), ProcessUnmapModuleLine),
 			(new Regex(@"\[inj\]: HookLdrpCondenseGraphRecurse\((\S+), (\S+), (\S+)\) ENTER", RegexCommonOptions), ProcessCondenseGraphRecurseEnterLine),
 			(new Regex(@"\[inj\]: HookLdrpCondenseGraphRecurse\((\S+), (\S+), (\S+)\) EXIT", RegexCommonOptions), ProcessCondenseGraphRecurseExitLine),
-
+			(new Regex(@"\[inj\]: HookLdrpPreprocessDllName\((.+), (.+), (.+), (\S+)\) ENTER", RegexCommonOptions), ProcessPreprocessDllNameEnterLine),
+			(new Regex(@"\[inj\]: HookLdrpPreprocessDllName\((.+), (.+), (.+), (\S+)\) EXIT \[(\S+)\]", RegexCommonOptions), ProcessPreprocessDllNameExitLine),
+			(new Regex(@"\[inj\]: HookLdrpApplyFileNameRedirection\((.+), (.+), (.+), (.+), (\S+)\) ENTER", RegexCommonOptions), ProcessApplyFileNameRedirectionEnterLine),
+			(new Regex(@"\[inj\]: HookLdrpApplyFileNameRedirection\((.+), (.+), (.+), (.+), (\S+)\) EXIT \[(\S+)\]", RegexCommonOptions), ProcessApplyFileNameRedirectionExitLine),
 		};
 
-		private static readonly string[] HookTargets = new[]
+		private static readonly string[] HookTargets =
 		{
 			"LdrpAllocateModuleEntry",
 			"LdrpMergeNodes",
@@ -50,6 +52,8 @@ namespace LoaderWatch.CLI
 			"LdrpFreeLoadContext",
 			"LdrpUnmapModule",
 			"LdrpCondenseGraphRecurse",
+			"LdrpPreprocessDllName",
+			"LdrpApplyFileNameRedirection",
 		};
 
 		private static void ProcessTargetOffsetsLine(ProcessContext context, Match match)
@@ -160,6 +164,26 @@ namespace LoaderWatch.CLI
 			Console.WriteLine($"CONDENSE {marker} {node.RootModuleName} ({preorderNumber}): {modulesText}");
 		}
 
+		private static void ProcessPreprocessDllNameEnterLine(ProcessContext context, Match match)
+		{
+			Console.WriteLine($"PreprocessDllName IN {match.Groups[1].Value} {match.Groups[2].Value} {match.Groups[3].Value} {match.Groups[4].Value}");
+		}
+
+		private static void ProcessPreprocessDllNameExitLine(ProcessContext context, Match match)
+		{
+			Console.WriteLine($"PreprocessDllName OUT {match.Groups[1].Value} {match.Groups[2].Value} {match.Groups[3].Value} {match.Groups[4].Value} -> 0x{match.Groups[5].Value}");
+		}
+
+		private static void ProcessApplyFileNameRedirectionEnterLine(ProcessContext context, Match match)
+		{
+			Console.WriteLine($"ApplyFileNameRedirection IN {match.Groups[1].Value} {match.Groups[2].Value} {match.Groups[3].Value} {match.Groups[4].Value}");
+		}
+
+		private static void ProcessApplyFileNameRedirectionExitLine(ProcessContext context, Match match)
+		{
+			Console.WriteLine($"ApplyFileNameRedirection OUT {match.Groups[1].Value} {match.Groups[2].Value} {match.Groups[3].Value} {match.Groups[4].Value} SxS:{match.Groups[5].Value} -> 0x{match.Groups[6].Value}");
+		}
+
 		// Based on https://stackoverflow.com/a/11672569
 		public static string WhereSearch(string filename)
 		{
@@ -210,11 +234,11 @@ namespace LoaderWatch.CLI
 			_rootDirectories = new[] {
 				Environment.CurrentDirectory,
 				Path.GetDirectoryName(typeof(Program).Assembly.Location),
-			}.Where(x => Directory.Exists(x)).ToArray();
+			}.Where(Directory.Exists).ToArray();
 
 			_platformDirectories = _rootDirectories
 				.Select(x => Path.Combine(x, "64"))
-				.Where(x => Directory.Exists(x))
+				.Where(Directory.Exists)
 				.ToArray();
 
 			foreach (var path in _platformDirectories)
@@ -223,8 +247,6 @@ namespace LoaderWatch.CLI
 			}
 
 			NativeFacility.InitializePhLib();
-
-			MyMemory = new MemorySharp(Process.GetCurrentProcess());
 
 			if (args.Length > 0)
 				TargetExecutable = WhereSearch(args[0]);
@@ -279,7 +301,7 @@ namespace LoaderWatch.CLI
 			if (string.Equals(e.Name, @"C:\WINDOWS\System32\KERNELBASE.dll",
 				StringComparison.OrdinalIgnoreCase))
 			{
-				var injectLib = _platformDirectories.Select(x => Path.Combine(x, InjectDllName)).First(x => File.Exists(x));
+				var injectLib = _platformDirectories.Select(x => Path.Combine(x, InjectDllName)).First(File.Exists);
 				var status = NativeFacility.LoadDllProcess(e.ProcessId, e.ThreadId, injectLib);
 
 				Console.WriteLine($"Injection scheduling [{injectLib}] -> {NativeFacility.Status(status)}");
@@ -330,13 +352,10 @@ namespace LoaderWatch.CLI
 
 							var modules = node.Modules.ToArray();
 
-							var rootModuleName = node.RootModuleName;
-
 							if (modules.Length == 1)
 								continue;
 
-							if (condenseRoots != null)
-								condenseRoots.Add(node);
+							condenseRoots.Add(node);
 						}
 					}
 				}
@@ -442,7 +461,7 @@ namespace LoaderWatch.CLI
 				var currentSnapsVerbosity = ShowSnaps && !SubstringsOfNoInterest.Any(x => line.Contains(x));
 				if (currentSnapsVerbosity || SubstringsOfInterest.Any(x => line.Contains(x)))
 				{
-					Console.WriteLine(line.Trim(new char[] { '\n', '\r' }));
+					Console.WriteLine(line.Trim('\n', '\r'));
 				}
 			}
 

@@ -214,6 +214,13 @@ typedef struct _LDR_DATA_TABLE_ENTRY
 } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
 
 
+typedef struct _LDRP_UNICODE_STRING_BUNDLE
+{
+    UNICODE_STRING String;
+    WCHAR StaticBuffer[128];
+} LDRP_UNICODE_STRING_BUNDLE, * PLDRP_UNICODE_STRING_BUNDLE;
+
+
 //
 // Loader Functions
 //
@@ -792,8 +799,9 @@ LdrpFindExistingModule(IN PUNICODE_STRING BaseDllName OPTIONAL,
 NTSTATUS
 NTAPI
 LdrpPreprocessDllName(IN PUNICODE_STRING DllName,
-                      IN OUT PUNICODE_STRING OutputDllName,
-                      OUT PLDRP_LOAD_CONTEXT_FLAGS LoadContextFlags OPTIONAL);
+                      IN OUT PLDRP_UNICODE_STRING_BUNDLE OutputDllName,
+                      IN PLDR_DATA_TABLE_ENTRY ParentEntry OPTIONAL,
+                      OUT PLDRP_LOAD_CONTEXT_FLAGS LoadContextFlags);
 
 NTSTATUS NTAPI LdrpInitializeTls(VOID);
 NTSTATUS NTAPI LdrpAllocateTls(VOID);
@@ -911,8 +919,10 @@ LdrpCheckForLoadedDll_Legacy(IN PWSTR DllPath,
 
 NTSTATUS
 NTAPI
-LdrpApplyFileNameRedirection(IN PUNICODE_STRING DllName,
-                             IN OUT PUNICODE_STRING RedirectedDllName,
+LdrpApplyFileNameRedirection(IN PLDR_DATA_TABLE_ENTRY ParentEntry,
+                             IN PUNICODE_STRING DllName,
+                             IN PVOID,
+                             IN OUT PLDRP_UNICODE_STRING_BUNDLE RedirectedDllName,
                              OUT PBOOLEAN RedirectedSxS);
 
 NTSTATUS

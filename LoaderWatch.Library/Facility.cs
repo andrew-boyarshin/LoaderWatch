@@ -9,14 +9,12 @@ namespace LoaderWatch.Library
 {
 	public sealed class Facility
 	{
-		public delegate void ProcessAnyEventHandler(object sender, ProcessAnyEventArgs e);
 		public delegate void DebugExceptionEventHandler(object sender, DebugExceptionEventArgs e);
 		public delegate void ProcessCreatedEventHandler(object sender, ProcessCreatedEventArgs e);
 		public delegate void ProcessModuleLoadEventHandler(object sender, ProcessModuleLoadEventArgs e);
 		public delegate void ProcessDebugOutputEventHandler(object sender, ProcessDebugOutputEventArgs e);
 		public delegate void ProcessBreakpointEventHandler(object sender, ProcessBreakpointEventArgs e);
 
-		public event ProcessAnyEventHandler ProcessAny;
 		public event DebugExceptionEventHandler DebugException;
 		public event ProcessCreatedEventHandler ProcessCreated;
 		public event ProcessModuleLoadEventHandler ProcessModuleLoad;
@@ -163,19 +161,16 @@ namespace LoaderWatch.Library
 
 		private void OnProcessCreated(ProcessCreatedEventArgs e)
 		{
-			OnProcessAny(e);
 			ProcessCreated?.Invoke(this, e);
 		}
 
 		private void OnProcessModuleLoad(ProcessModuleLoadEventArgs e)
 		{
-			OnProcessAny(e);
 			ProcessModuleLoad?.Invoke(this, e);
 		}
 
 		private void OnProcessDebugOutput(ProcessDebugOutputEventArgs e)
 		{
-			OnProcessAny(e);
 			ProcessDebugOutput?.Invoke(this, e);
 		}
 
@@ -201,11 +196,6 @@ namespace LoaderWatch.Library
 
 				ModulesWithSymbols.Add(dllName);
 			}
-		}
-
-		private void OnProcessAny(ProcessEventArgs e)
-		{
-			ProcessAny?.Invoke(this, new ProcessAnyEventArgs(e));
 		}
 
 		private void OnDebugException(DebugExceptionEventArgs e)
